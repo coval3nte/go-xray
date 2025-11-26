@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"slices"
+	"sync"
 	"syscall"
 
 	"github.com/xjasonlyu/tun2socks/v2/engine"
@@ -110,12 +112,26 @@ func main() {
 		execCommand(cmd)
 	}
 
+	sigCh := make(chan os.Signal, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	wg := *new(sync.WaitGroup)
+	wg.Go(func() {
+		if err := monitor(ctx, utunIPv4, replaceDefault(remoteAddress, &utunIPv4, nil, &defaultV4Gateway, false)); err != nil {
+			fmt.Printf("monitor err: %v\n", err)
+			sigCh <- os.Kill
+		}
+	})
+
 	runtime.GC()
 	debug.FreeOSMemory()
 
-	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	<-sigCh
+
+	cancel()
+	wg.Wait()
 
 	cmds = replaceDefault(remoteAddress, &defaultV4Gateway, &defaultV6Gateway, nil, true)
 	for _, cmd := range cmds {
