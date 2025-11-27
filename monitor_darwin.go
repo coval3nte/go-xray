@@ -12,6 +12,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+var routes = make(chan *Route)
+
 func monitor(ctx context.Context, config *Config) error {
 	defer ctx.Done()
 
@@ -21,28 +23,54 @@ func monitor(ctx context.Context, config *Config) error {
 	}
 
 	var buf [2 << 10]byte
+	routineError := make(chan error, 1)
+
+	go func() {
+		for {
+			n, err := unix.Read(fd, buf[:])
+			if err != nil {
+				routineError <- err
+				return
+			}
+
+			msgs, err := route.ParseRIB(route.RIBTypeRoute, buf[:n])
+			if err != nil {
+				fmt.Printf("[monitor] parseRIB error: %v\n", err)
+			}
+
+			for _, msg := range msgs {
+				switch msg := msg.(type) {
+				case *route.RouteMessage:
+					handleRouteMessage(config, msg)
+				}
+			}
+		}
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("monitor received terminate signal")
+			fmt.Println("[monitor] received terminate signal")
 			return nil
-		default:
-		}
-
-		n, err := unix.Read(fd, buf[:])
-		if err != nil {
+		case err := <-routineError:
 			return err
-		}
+		case route := <-routes:
+			config.internetIPv4Gateway.Gateway = route.Gateway
 
-		msgs, err := route.ParseRIB(route.RIBTypeRoute, buf[:n])
-		if err != nil {
-			fmt.Println(err)
-		}
+			cmds, err := replaceDefault(
+				config.remoteAddress,
+				&config.utunIPv4,
+				nil,
+				&config.internetIPv4Gateway.Gateway,
+				false,
+			)
+			if err != nil {
+				fmt.Printf("[monitor] replaceDefault error: %v\n", err)
+			}
 
-		for _, msg := range msgs {
-			switch msg := msg.(type) {
-			case *route.RouteMessage:
-				handleRouteMessage(config, msg)
+			for _, cmd := range cmds {
+				fmt.Printf("[monitor] executing: %s\n", cmd)
+				execCommand(cmd)
 			}
 		}
 	}
@@ -70,27 +98,14 @@ func handleRouteMessage(config *Config, msg *route.RouteMessage) {
 	}
 
 	fmt.Printf(
-		"type=%s, gateway=%s, dst=%s\n",
+		"[monitor] type=%s, gateway=%s, dst=%s\n",
 		rtmTypeToString(msg.Type), ipOfAddr(msg.Addrs[unix.RTAX_GATEWAY]), ipOfAddr(msg.Addrs[unix.RTAX_DST]),
 	)
 
 	if msg.Type == unix.RTM_ADD && !gw.Equal(net.ParseIP(config.utunIPv4)) && dst.IsUnspecified() {
-		config.internetIPv4Gateway.Gateway = gw.String()
-
-		cmds, err := replaceDefault(
-			config.remoteAddress,
-			&config.utunIPv4,
-			nil,
-			&config.internetIPv4Gateway.Gateway,
-			false,
-		)
-		if err != nil {
-			fmt.Printf("monitor err: %v\n", err)
-		}
-
-		for _, cmd := range cmds {
-			fmt.Printf("executing: %s\n", cmd)
-			execCommand(cmd)
+		routes <- &Route{
+			Gateway:   gw.String(),
+			Interface: "",
 		}
 	}
 }

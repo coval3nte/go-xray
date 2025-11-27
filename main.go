@@ -119,7 +119,7 @@ func main() {
 	wg := *new(sync.WaitGroup)
 	wg.Go(func() {
 		if err := monitor(ctx, config); err != nil {
-			fmt.Printf("monitor err: %v\n", err)
+			fmt.Printf("[monitor] error: %v\n", err)
 			sigCh <- os.Kill
 		}
 	})
