@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"net"
-	"os/exec"
 	"regexp"
 	"strings"
 )
@@ -28,8 +27,7 @@ func getDefaultGateway(isV6 bool) (*Route, error) {
 	}
 	cmd = append(cmd, "default")
 
-	routeCmd := exec.Command(cmd[0], cmd[1:]...)
-	result, err := routeCmd.Output()
+	result, err := execCommand(strings.Join(cmd, " "))
 	if err != nil {
 		panic(err)
 	}

@@ -11,16 +11,25 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func execCommand(cmd string) error {
+func retryBackOff(t func() error, retries int) {
+	for range retries {
+		if err := t(); err == nil {
+			return
+		}
+	}
+}
+
+func execCommand(cmd string) ([]byte, error) {
 	parts, err := shlex.Split(cmd)
 	if err != nil {
-		return err
+		return nil, err
 	}
+
 	if len(parts) == 0 {
-		return fmt.Errorf("empty command")
+		return nil, fmt.Errorf("empty command")
 	}
-	_, err = exec.Command(parts[0], parts[1:]...).Output()
-	return err
+
+	return exec.Command(parts[0], parts[1:]...).Output()
 }
 
 func getRegexpSubmatch(re *regexp.Regexp, b []byte, index int) ([]byte, error) {

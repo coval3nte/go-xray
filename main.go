@@ -83,7 +83,14 @@ func main() {
 
 	for _, cmd := range cmds {
 		fmt.Printf("executing: %s\n", cmd)
-		execCommand(cmd)
+		retryBackOff(func() error {
+			_, err := execCommand(cmd)
+			if err != nil {
+				fmt.Printf("command failed: %v\n", err)
+			}
+
+			return err
+		}, 3)
 	}
 
 	sigCh := make(chan os.Signal, 1)
@@ -114,6 +121,13 @@ func main() {
 
 	for _, cmd := range cmds {
 		fmt.Printf("executing: %s\n", cmd)
-		execCommand(cmd)
+		retryBackOff(func() error {
+			_, err := execCommand(cmd)
+			if err != nil {
+				fmt.Printf("command failed: %v\n", err)
+			}
+
+			return err
+		}, 3)
 	}
 }
