@@ -12,7 +12,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func monitor(ctx context.Context, gateway string, cmds []string) error {
+func monitor(ctx context.Context, config *Config) error {
 	defer ctx.Done()
 
 	fd, err := unix.Socket(unix.AF_ROUTE, unix.SOCK_RAW, 0)
@@ -42,38 +42,55 @@ func monitor(ctx context.Context, gateway string, cmds []string) error {
 		for _, msg := range msgs {
 			switch msg := msg.(type) {
 			case *route.RouteMessage:
-				if !slices.Contains(
-					[]int{
-						unix.RTM_ADD,
-						unix.RTM_DELETE,
-					},
-					msg.Type,
-				) {
-					continue
-				}
-
-				gw := ipOfAddr(msg.Addrs[unix.RTAX_GATEWAY])
-				if gw.Equal(nil) {
-					continue
-				}
-
-				dst := ipOfAddr(msg.Addrs[unix.RTAX_DST])
-				if dst.Equal(nil) && !dst.IsUnspecified() {
-					continue
-				}
-
-				fmt.Printf(
-					"type=%s, gateway=%s, dst=%s\n",
-					rtmTypeToString(msg.Type), ipOfAddr(msg.Addrs[unix.RTAX_GATEWAY]), ipOfAddr(msg.Addrs[unix.RTAX_DST]),
-				)
-
-				if msg.Type == unix.RTM_ADD && !gw.Equal(net.ParseIP(gateway)) && dst.IsUnspecified() {
-					for _, cmd := range cmds {
-						fmt.Printf("executing: %s\n", cmd)
-						execCommand(cmd)
-					}
-				}
+				handleRouteMessage(config, msg)
 			}
+		}
+	}
+}
+
+func handleRouteMessage(config *Config, msg *route.RouteMessage) {
+	if !slices.Contains(
+		[]int{
+			unix.RTM_ADD,
+			unix.RTM_DELETE,
+		},
+		msg.Type,
+	) {
+		return
+	}
+
+	gw := ipOfAddr(msg.Addrs[unix.RTAX_GATEWAY])
+	if gw.Equal(nil) {
+		return
+	}
+
+	dst := ipOfAddr(msg.Addrs[unix.RTAX_DST])
+	if dst.Equal(nil) && !dst.IsUnspecified() {
+		return
+	}
+
+	fmt.Printf(
+		"type=%s, gateway=%s, dst=%s\n",
+		rtmTypeToString(msg.Type), ipOfAddr(msg.Addrs[unix.RTAX_GATEWAY]), ipOfAddr(msg.Addrs[unix.RTAX_DST]),
+	)
+
+	if msg.Type == unix.RTM_ADD && !gw.Equal(net.ParseIP(config.utunIPv4)) && dst.IsUnspecified() {
+		config.internetIPv4Gateway.Gateway = gw.String()
+
+		cmds, err := replaceDefault(
+			config.remoteAddress,
+			&config.utunIPv4,
+			nil,
+			&config.internetIPv4Gateway.Gateway,
+			false,
+		)
+		if err != nil {
+			fmt.Printf("monitor err: %v\n", err)
+		}
+
+		for _, cmd := range cmds {
+			fmt.Printf("executing: %s\n", cmd)
+			execCommand(cmd)
 		}
 	}
 }

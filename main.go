@@ -26,14 +26,7 @@ func main() {
 
 	remoteAddress := *remoteAddressFlag
 	configFile := *configFileFlag
-	utunIPv4 := *utunIPv4Flag
 	inboundProxyURI := *inboundProxyURIFlag
-
-	if remoteAddress == "" {
-		flag.PrintDefaults()
-		fmt.Println("\nerror: invalid remote address")
-		return
-	}
 
 	ipv4Gateway, err := getDefaultGateway(false)
 	if err != nil {
@@ -42,7 +35,30 @@ func main() {
 
 	ipv6Gateway, _ := getDefaultGateway(true)
 
-	replaceString, err := replaceDefault(remoteAddress, &utunIPv4, nil, &ipv4Gateway.Gateway, false)
+	config := &Config{
+		internetIPv4Gateway: ipv4Gateway,
+		internetIPv6Gateway: ipv6Gateway,
+		utunIPv4:            *utunIPv4Flag,
+		remoteAddress:       remoteAddress,
+	}
+
+	if !validateAddress(config.remoteAddress) {
+		flag.PrintDefaults()
+		fmt.Printf("\nerror: %s\n", invalidRemote)
+		return
+	} else if !validateAddress(config.utunIPv4) {
+		flag.PrintDefaults()
+		fmt.Printf("\nerror: %s\n", invalidTunIPv4)
+		return
+	}
+
+	replaceDefaultGateway, err := replaceDefault(
+		remoteAddress,
+		&config.utunIPv4,
+		nil,
+		&ipv4Gateway.Gateway,
+		false,
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -52,18 +68,19 @@ func main() {
 
 	cmds := slices.Concat(
 		[]string{
-			setupInterface(uTunName, utunIPv4),
+			setupInterface(uTunName, config.utunIPv4),
 		},
-		replaceString,
+		replaceDefaultGateway,
 	)
 
-	config := &engine.Key{
+	tunConfig := &engine.Key{
 		Proxy:     inboundProxyURI,
 		Device:    uTunName,
-		Interface: ipv4Gateway.Interface,
+		Interface: config.internetIPv4Gateway.Interface,
 		LogLevel:  "warn",
 	}
-	engine.Insert(config)
+
+	engine.Insert(tunConfig)
 	engine.Start()
 	defer engine.Stop()
 
@@ -101,7 +118,7 @@ func main() {
 
 	wg := *new(sync.WaitGroup)
 	wg.Go(func() {
-		if err := monitor(ctx, utunIPv4, replaceString); err != nil {
+		if err := monitor(ctx, config); err != nil {
 			fmt.Printf("monitor err: %v\n", err)
 			sigCh <- os.Kill
 		}

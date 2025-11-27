@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os/exec"
 	"regexp"
 
@@ -37,4 +38,8 @@ func getRegexpSubmatch(re *regexp.Regexp, b []byte, index int) ([]byte, error) {
 	}
 
 	return nil, fmt.Errorf("no matches for the supplied capture group found")
+}
+
+func validateAddress(s string) bool {
+	return s != "" && net.ParseIP(s) != nil
 }
