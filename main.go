@@ -5,9 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
-	"regexp"
 	"runtime"
 	"runtime/debug"
 	"slices"
@@ -37,55 +35,30 @@ func main() {
 		return
 	}
 
-	routeV4Cmd := exec.Command("route", "-n", "get", "default")
-	resultV4, err := routeV4Cmd.Output()
+	ipv4Gateway, err := getDefaultGateway(false)
 	if err != nil {
 		panic(err)
 	}
 
-	routeV6Cmd := exec.Command("route", "-n", "get", "-inet6", "default")
-	resultV6, err := routeV6Cmd.Output()
+	ipv6Gateway, _ := getDefaultGateway(true)
+
+	replaceString, err := replaceDefault(remoteAddress, &utunIPv4, nil, &ipv4Gateway.Gateway, false)
 	if err != nil {
 		panic(err)
 	}
-
-	gwRegex := regexp.MustCompile("gateway: (?P<ip>.*)")
-	intfRegex := regexp.MustCompile("interface: (?P<intf>.*)")
-	ipRegexIndex := gwRegex.SubexpIndex("ip")
-	intfRegexIndex := intfRegex.SubexpIndex("intf")
-
-	defaultV4GatewayBytes, err := getRegexpSubmatch(gwRegex, resultV4, ipRegexIndex)
-	if err != nil {
-		fmt.Println("invalid IPv4 Gateway...")
-		return
-	}
-	defaultV4Gateway := string(defaultV4GatewayBytes)
-
-	defaultV6Gateway := *new(string)
-	defaultV6GatewayBytes, err := getRegexpSubmatch(gwRegex, resultV6, ipRegexIndex)
-	if err == nil {
-		defaultV6Gateway = string(defaultV6GatewayBytes)
-	}
-
-	outboundIntfBytes, err := getRegexpSubmatch(intfRegex, resultV4, intfRegexIndex)
-	if err != nil {
-		fmt.Println("invalid IPv4 Outbound Interface...")
-		return
-	}
-	outboundIntf := string(outboundIntfBytes)
 
 	uTunName, uTunIndex := createTun()
 	cmds := slices.Concat(
 		[]string{
 			setupInterface(uTunName, utunIPv4),
 		},
-		replaceDefault(remoteAddress, &utunIPv4, nil, &defaultV4Gateway, false),
+		replaceString,
 	)
 
 	config := &engine.Key{
 		Proxy:     inboundProxyURI,
 		Device:    fmt.Sprintf("utun%d", uTunIndex),
-		Interface: outboundIntf,
+		Interface: ipv4Gateway.Interface,
 		LogLevel:  "warn",
 	}
 	engine.Insert(config)
@@ -119,7 +92,7 @@ func main() {
 
 	wg := *new(sync.WaitGroup)
 	wg.Go(func() {
-		if err := monitor(ctx, utunIPv4, replaceDefault(remoteAddress, &utunIPv4, nil, &defaultV4Gateway, false)); err != nil {
+		if err := monitor(ctx, utunIPv4, replaceString); err != nil {
 			fmt.Printf("monitor err: %v\n", err)
 			sigCh <- os.Kill
 		}
@@ -134,7 +107,11 @@ func main() {
 	cancel()
 	wg.Wait()
 
-	cmds = replaceDefault(remoteAddress, &defaultV4Gateway, &defaultV6Gateway, nil, true)
+	cmds, err = replaceDefault(remoteAddress, &ipv4Gateway.Gateway, &ipv6Gateway.Gateway, nil, true)
+	if err != nil {
+		panic(err)
+	}
+
 	for _, cmd := range cmds {
 		fmt.Printf("executing: %s\n", cmd)
 		execCommand(cmd)

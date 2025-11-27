@@ -33,7 +33,8 @@ func replaceDefault(
 	remoteAddress string,
 	defaultV4Gateway, defaultV6Gateway *string,
 	internetV4Gateway *string,
-	removeHostPinning bool) []string {
+	removeHostPinning bool,
+) ([]string, error) {
 	addHostAction := "add"
 	if removeHostPinning {
 		addHostAction = "delete"
@@ -42,6 +43,10 @@ func replaceDefault(
 	ipv6Add := []string{}
 	if defaultV6Gateway != nil && *defaultV6Gateway != "" {
 		ipv6Add = append(ipv6Add, addIPv6Default(*defaultV6Gateway))
+	}
+
+	if defaultV4Gateway == nil || *defaultV4Gateway == "" {
+		return nil, fmt.Errorf("invalid IPv4 Gateway")
 	}
 
 	if internetV4Gateway == nil {
@@ -55,5 +60,5 @@ func replaceDefault(
 			fmt.Sprintf(`route -n '%s' -host '%s' '%s'`, addHostAction, remoteAddress, *internetV4Gateway),
 		},
 		ipv6Add,
-	)
+	), nil
 }
