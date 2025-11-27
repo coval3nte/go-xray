@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -58,18 +59,28 @@ func createTun() (string, int) {
 		panic(err)
 	}
 
-	intfInt := -1
-	intfGap := false
+	utuns := *new([]int)
 	for _, intf := range intfs {
 		if strings.HasPrefix(intf.Name, tunPrefix) {
-			previous := intfInt
+			var intfInt int
 			fmt.Sscanf(intf.Name, tunPrefix+"%d", &intfInt)
+			utuns = append(utuns, intfInt)
+		}
+	}
 
-			if intfInt > previous+1 {
-				intfGap = true
-				intfInt = previous + 1
-				break
-			}
+	intfInt := -1
+	intfGap := false
+
+	slices.Sort(utuns)
+
+	for _, utun := range utuns {
+		previous := intfInt
+		intfInt = utun
+
+		if gappedIntf := previous + 1; intfInt > gappedIntf {
+			intfGap = true
+			intfInt = gappedIntf
+			break
 		}
 	}
 
