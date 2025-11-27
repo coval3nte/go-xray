@@ -39,12 +39,12 @@ func getDefaultGateway(isV6 bool) (*Route, error) {
 
 	defaultGatewayBytes, err := getRegexpSubmatch(gwRegex, result, ipRegexIndex)
 	if err != nil {
-		return nil, fmt.Errorf("invalid Gateway...")
+		return &Route{}, fmt.Errorf("invalid Gateway...")
 	}
 
 	outboundIntfBytes, err := getRegexpSubmatch(intfRegex, result, intfRegexIndex)
 	if err != nil {
-		return nil, fmt.Errorf("invalid Outbound Interface...")
+		return &Route{}, fmt.Errorf("invalid Outbound Interface...")
 	}
 
 	return &Route{
