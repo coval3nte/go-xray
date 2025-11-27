@@ -1,0 +1,5 @@
+- [x]: add route monitor
+- [ ]: linux support
+  - [netlink](https://github.com/vishvananda/netlink)
+- [ ]: clean route monitor _cancel_ on SIGINT syscall
+- [ ]: IPv6 support

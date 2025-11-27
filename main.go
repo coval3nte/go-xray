@@ -133,7 +133,13 @@ func main() {
 	cancel()
 	wg.Wait()
 
-	cmds, err = replaceDefault(remoteAddress, &ipv4Gateway.Gateway, &ipv6Gateway.Gateway, nil, true)
+	cmds, err = replaceDefault(
+		remoteAddress,
+		&ipv4Gateway.Gateway,
+		&ipv6Gateway.Gateway,
+		nil,
+		true,
+	)
 	if err != nil {
 		panic(err)
 	}
