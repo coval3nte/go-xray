@@ -47,7 +47,9 @@ func main() {
 		panic(err)
 	}
 
-	uTunName, uTunIndex := createTun()
+	uTunName, _ := createTun()
+	fmt.Printf("found available tun interface: %s\n", uTunName)
+
 	cmds := slices.Concat(
 		[]string{
 			setupInterface(uTunName, utunIPv4),
@@ -57,7 +59,7 @@ func main() {
 
 	config := &engine.Key{
 		Proxy:     inboundProxyURI,
-		Device:    fmt.Sprintf("utun%d", uTunIndex),
+		Device:    uTunName,
 		Interface: ipv4Gateway.Interface,
 		LogLevel:  "warn",
 	}

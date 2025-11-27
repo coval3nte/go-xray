@@ -15,6 +15,8 @@ var (
 
 	ipRegexIndex   = gwRegex.SubexpIndex("ip")
 	intfRegexIndex = intfRegex.SubexpIndex("intf")
+
+	tunPrefix string = "utun"
 )
 
 type Route struct {
@@ -59,9 +61,9 @@ func createTun() (string, int) {
 	intfInt := -1
 	intfGap := false
 	for _, intf := range intfs {
-		if strings.HasPrefix(intf.Name, "utun") {
+		if strings.HasPrefix(intf.Name, tunPrefix) {
 			previous := intfInt
-			fmt.Sscanf(intf.Name, "utun%d", &intfInt)
+			fmt.Sscanf(intf.Name, tunPrefix+"%d", &intfInt)
 
 			if intfInt > previous+1 {
 				intfGap = true
@@ -77,5 +79,9 @@ func createTun() (string, int) {
 		intfInt++
 	}
 
-	return fmt.Sprintf("utun%d", intfInt), intfInt
+	return getTunName(intfInt), intfInt
+}
+
+func getTunName(index int) string {
+	return fmt.Sprintf("%s%d", tunPrefix, index)
 }
