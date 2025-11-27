@@ -32,7 +32,8 @@ func main() {
 	inboundProxyURI := *inboundProxyURIFlag
 
 	if remoteAddress == "" {
-		fmt.Println("invalid remote address, exiting...")
+		flag.PrintDefaults()
+		fmt.Println("\nerror: invalid remote address")
 		return
 	}
 
