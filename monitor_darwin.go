@@ -5,7 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"net"
+	"net/netip"
 	"slices"
 
 	"golang.org/x/net/route"
@@ -68,6 +68,7 @@ func monitor(ctx context.Context, config *Config) error {
 				fmt.Printf("[monitor] replaceDefault error: %v\n", err)
 			}
 
+			cmds = append([]string{editIP(config.remoteAddress, config.internetIPv4Gateway.Gateway, true)}, cmds...)
 			for _, cmd := range cmds {
 				fmt.Printf("[monitor] executing: %s\n", cmd)
 				execCommand(cmd)
@@ -81,6 +82,7 @@ func handleRouteMessage(config *Config, msg *route.RouteMessage) {
 		[]int{
 			unix.RTM_ADD,
 			unix.RTM_DELETE,
+			// unix.RTM_CHANGE,
 		},
 		msg.Type,
 	) {
@@ -88,12 +90,12 @@ func handleRouteMessage(config *Config, msg *route.RouteMessage) {
 	}
 
 	gw := ipOfAddr(msg.Addrs[unix.RTAX_GATEWAY])
-	if gw.Equal(nil) {
+	if !gw.IsValid() || gw.IsUnspecified() {
 		return
 	}
 
 	dst := ipOfAddr(msg.Addrs[unix.RTAX_DST])
-	if dst.Equal(nil) && !dst.IsUnspecified() {
+	if !dst.IsValid() || !dst.IsUnspecified() {
 		return
 	}
 
@@ -102,10 +104,17 @@ func handleRouteMessage(config *Config, msg *route.RouteMessage) {
 		rtmTypeToString(msg.Type), ipOfAddr(msg.Addrs[unix.RTAX_GATEWAY]), ipOfAddr(msg.Addrs[unix.RTAX_DST]),
 	)
 
-	if msg.Type == unix.RTM_ADD && !gw.Equal(net.ParseIP(config.utunIPv4)) && dst.IsUnspecified() {
+	if msg.Type == unix.RTM_ADD &&
+		((gw != netip.MustParseAddr(config.utunIPv4)) || (gw.Is6())) {
+		if gw.Is6() {
+			routes <- &Route{
+				Gateway: config.internetIPv4Gateway.Gateway,
+			}
+			return
+		}
+
 		routes <- &Route{
-			Gateway:   gw.String(),
-			Interface: "",
+			Gateway: gw.String(),
 		}
 	}
 }

@@ -3,21 +3,21 @@
 package main
 
 import (
-	"net"
+	"net/netip"
 
 	"golang.org/x/net/route"
 	"golang.org/x/sys/unix"
 )
 
-func ipOfAddr(a route.Addr) net.IP {
+func ipOfAddr(a route.Addr) netip.Addr {
 	switch a := a.(type) {
 	case *route.Inet4Addr:
-		return net.IPv4(a.IP[0], a.IP[1], a.IP[2], a.IP[3])
+		return netip.AddrFrom4(a.IP)
 	case *route.Inet6Addr:
-		ip := net.IP(a.IP[:])
-		return ip
+		return netip.AddrFrom16(a.IP)
 	}
-	return net.IP{}
+
+	return netip.Addr{}
 }
 
 func rtmTypeToString(t int) string {

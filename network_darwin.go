@@ -31,17 +31,21 @@ func addIPv6Default(defaultV6Gateway string) string {
 	return fmt.Sprintf("route -n add -inet6 -net default '%s'", defaultV6Gateway)
 }
 
+func editIP(ip, gw string, delPinning bool) string {
+	addHostAction := "add"
+	if delPinning {
+		addHostAction = "delete"
+	}
+
+	return fmt.Sprintf(`route -n '%s' -host '%s' '%s'`, addHostAction, ip, gw)
+}
+
 func replaceDefault(
 	remoteAddress string,
 	defaultV4Gateway, defaultV6Gateway *string,
 	internetV4Gateway *string,
-	removeHostPinning bool,
+	delPinning bool,
 ) ([]string, error) {
-	addHostAction := "add"
-	if removeHostPinning {
-		addHostAction = "delete"
-	}
-
 	ipv6Add := []string{}
 	if defaultV6Gateway != nil && *defaultV6Gateway != "" {
 		ipv6Add = append(ipv6Add, addIPv6Default(*defaultV6Gateway))
@@ -59,7 +63,7 @@ func replaceDefault(
 		deleteDefault(),
 		[]string{
 			addIPv4Default(*defaultV4Gateway),
-			fmt.Sprintf(`route -n '%s' -host '%s' '%s'`, addHostAction, remoteAddress, *internetV4Gateway),
+			editIP(remoteAddress, *internetV4Gateway, delPinning),
 		},
 		ipv6Add,
 	), nil
